@@ -23,13 +23,13 @@ target_architectures=(
 )
 
 pull_docker_image() {
-    image="ghcr.io/gngpp/rust-musl-cross:$1"
+    image="ghcr.io/rust-cross/rust-musl-cross:$1"
     echo "Pulling $image"
     docker pull $image
 }
 
 rmi_docker_image() {
-    image="ghcr.io/gngpp/rust-musl-cross:$1"
+    image="ghcr.io/rust-cross/rust-musl-cross:$1"
     echo "Removing $image docker image"
     if [ "$rmi" = "true" ]; then
         docker rmi $image
@@ -49,7 +49,7 @@ build_macos_target() {
 }
 
 build_linux_target() {
-    docker_image="ghcr.io/gngpp/rust-musl-cross:$1"
+    docker_image="ghcr.io/rust-cross/rust-musl-cross:$1"
 
     features=""
     if [ "$1" = "armv5te-unknown-linux-musleabi" ] || [ "$1" = "arm-unknown-linux-musleabi" ] || [ "$1" = "arm-unknown-linux-musleabihf" ]; then
@@ -69,7 +69,7 @@ build_linux_target() {
         -v $HOME/.cargo/git:/root/.cargo/git \
         -e "FEATURES=$features" \
         -e "TARGET=$1" \
-        $docker_image /bin/bash -c "cargo build --release --target \$TARGET  \$FEATURES"
+        $docker_image /bin/bash -c "sudo apt-get update && sudo apt-get install -y libc6-dev && cargo build --release --target \$TARGET \$FEATURES"
 
     sudo chmod -R 777 target
     if [ "$1" != "i686-unknown-linux-gnu" ] && [ "$1" != "i586-unknown-linux-gnu" ]; then
@@ -84,7 +84,7 @@ build_linux_target() {
 }
 
 build_windows_target() {
-    docker_image="ghcr.io/gngpp/rust-musl-cross:$1"
+    docker_image="ghcr.io/rust-cross/rust-musl-cross:$1"
 
     echo "Building $1"
     docker run --rm -t \
