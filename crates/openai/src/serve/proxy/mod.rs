@@ -85,6 +85,14 @@ pub(crate) fn header_convert(
     headers.insert(header::ORIGIN, header::HeaderValue::from_static(origin));
     headers.insert(header::REFERER, header::HeaderValue::from_static(origin));
 
+    headers.insert(
+        header::COOKIE,
+        header::HeaderValue::from_str(
+            "__Secure-next-auth.callback-url=https%3A%2F%2Fchat.openai.com",
+        )
+        .map_err(ResponseError::InternalServerError)?,
+    );
+
     jar.iter()
         .filter(|c| {
             let name = c.name().to_lowercase();
