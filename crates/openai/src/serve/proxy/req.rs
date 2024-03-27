@@ -12,13 +12,14 @@ use serde_json::{json, Value};
 use crate::arkose::{ArkoseContext, ArkoseToken, Type};
 use crate::constant::{ARKOSE_TOKEN, EMPTY, MODEL, NULL, PUID};
 use crate::gpt_model::GPTModel;
-use crate::{arkose, with_context};
+use crate::{arkose, info, warn, with_context};
 
 use super::ext::{RequestExt, ResponseExt, SendRequestExt};
 use super::header_convert;
 use super::toapi;
 use crate::serve::error::{ProxyError, ResponseError};
 use crate::serve::puid::{get_or_init, reduce_key};
+use crate::URL_CHATGPT_API;
 
 #[async_trait]
 impl SendRequestExt for reqwest::Client {
@@ -119,6 +120,19 @@ async fn handle_conv_request(req: &mut RequestExt) -> Result<(), ResponseError> 
         }
     }
 
+    let chat_requirements_token = create_chat_requirements_token(&token).await?;
+    if let Some(chat_requirements_token) = chat_requirements_token {
+        req.headers.insert(
+            header::HeaderName::from_static("openai-sentinel-chat-requirements-token"),
+            header::HeaderValue::from_str(chat_requirements_token.as_str())
+                .map_err(ResponseError::BadRequest)?,
+        );
+        info!("Chat requirements token: {}", chat_requirements_token.as_str())
+    }
+    else {
+        warn!("Chat requirements token not found")
+    }
+
     // Parse model
     let model = GPTModel::from_str(model).map_err(ResponseError::BadRequest)?;
 
@@ -193,4 +207,26 @@ async fn handle_dashboard_request(req: &mut RequestExt) -> Result<(), ResponseEr
     drop(json);
 
     Ok(())
+}
+
+async fn create_chat_requirements_token(token: &str) -> Result<Option<String>, ResponseError> {
+    let token = token.trim_start_matches("Bearer ");
+    let resp = with_context!(api_client)
+        .post(format!(
+            "{URL_CHATGPT_API}/backend-api/sentinel/chat-requirements"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(ResponseError::InternalServerError)?
+        .error_for_status()
+        .map_err(ResponseError::BadRequest)?;
+    let body = resp.bytes().await?;
+    let json = serde_json::from_slice::<Value>(&body).map_err(ResponseError::BadRequest)?;
+    if let Some(token_value) = json.get("token") {
+        if let Some(token_str) = token_value.as_str() {
+            return Ok(Some(token_str.to_owned()));
+        }
+    }
+    Ok(None)
 }
