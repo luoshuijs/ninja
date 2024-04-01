@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::arkose::{ArkoseContext, ArkoseToken, Type};
 use crate::constant::{ARKOSE_TOKEN, EMPTY, MODEL, NULL, PUID};
 use crate::gpt_model::GPTModel;
-use crate::{arkose, info, warn, with_context};
+use crate::{arkose, debug, warn, with_context};
 
 use super::ext::{RequestExt, ResponseExt, SendRequestExt};
 use super::header_convert;
@@ -91,6 +91,8 @@ async fn handle_conv_request(req: &mut RequestExt) -> Result<(), ResponseError> 
         .as_object_mut()
         .ok_or(ResponseError::BadRequest(ProxyError::BodyMustBeJsonObject))?;
 
+    debug!("Conversation POST Request Body: {:?}", body);
+
     // If model is not exist, then return error
     let model = body
         .get(MODEL)
@@ -127,9 +129,11 @@ async fn handle_conv_request(req: &mut RequestExt) -> Result<(), ResponseError> 
             header::HeaderValue::from_str(chat_requirements_token.as_str())
                 .map_err(ResponseError::BadRequest)?,
         );
-        info!("Chat requirements token: {}", chat_requirements_token.as_str())
-    }
-    else {
+        debug!(
+            "Chat requirements token: {}",
+            chat_requirements_token.as_str()
+        )
+    } else {
         warn!("Chat requirements token not found")
     }
 
@@ -141,7 +145,15 @@ async fn handle_conv_request(req: &mut RequestExt) -> Result<(), ResponseError> 
         let condition = match body.get(ARKOSE_TOKEN) {
             Some(s) => {
                 let s = s.as_str().unwrap_or(EMPTY);
-                s.is_empty() || s.eq(NULL)
+                let is_empty = s.is_empty() || s.eq(NULL);
+                if !is_empty {
+                    req.headers.insert(
+                        header::HeaderName::from_static("openai-sentinel-arkose-token"),
+                        header::HeaderValue::from_str(s).map_err(ResponseError::BadRequest)?,
+                    );
+                    debug!("Sentinel arkose token: {}", s)
+                }
+                is_empty
             }
             None => true,
         };
@@ -160,6 +172,12 @@ async fn handle_conv_request(req: &mut RequestExt) -> Result<(), ResponseError> 
             req.body = Some(Bytes::from(
                 serde_json::to_vec(&json).map_err(ResponseError::BadRequest)?,
             ));
+            req.headers.insert(
+                header::HeaderName::from_static("openai-sentinel-arkose-token"),
+                header::HeaderValue::from_str(arkose_token.value())
+                    .map_err(ResponseError::BadRequest)?,
+            );
+            debug!("Sentinel arkose token: {}", arkose_token.value())
         }
     }
 

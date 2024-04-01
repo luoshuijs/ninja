@@ -93,6 +93,11 @@ pub(crate) fn header_convert(
         .map_err(ResponseError::InternalServerError)?,
     );
 
+    h.get("openai-sentinel-chat-requirements-token")
+        .map(|v| headers.insert("openai-sentinel-chat-requirements-token", v.clone()));
+    h.get("openai-sentinel-arkose-token")
+        .map(|v| headers.insert("openai-sentinel-arkose-token", v.clone()));
+
     jar.iter()
         .filter(|c| {
             let name = c.name().to_lowercase();
